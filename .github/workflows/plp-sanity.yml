@@ -58,6 +58,10 @@ jobs:
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
 
+      - name: Cleanup old Drive reports (keep 7 days)
+        run: node scripts/cleanup-drive.js 7
+        continue-on-error: true
+
       - name: Upload report as artifact
         uses: actions/upload-artifact@v4
         if: always()
