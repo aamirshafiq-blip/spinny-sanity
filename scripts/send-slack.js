@@ -14,6 +14,7 @@ if (!SLACK_TOKEN) { console.error('SLACK_TOKEN env var is required'); process.ex
 
 const CHANNELS = [
   { id: 'C097JUWCPEU', prefix: '' },
+  { id: 'C05GVHETJRM', prefix: '<@U02KH6AJCTV> <@U0A7LEA1P0Q>\n' },
 ];
 
 // ── find latest report ───────────────────────────────────────────────────────
