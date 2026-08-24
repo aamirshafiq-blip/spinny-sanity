@@ -42,7 +42,6 @@ const CATS = [
   { key: 'api',    emoji: '🔌', label: 'API' },
 ];
 const DEVS = ['Desktop', 'Android', 'iOS'];
-const DEV_EMOJI = { Desktop: '🖥️', Android: '📱', iOS: '🍎' };
 
 function computeStats() {
   const out = {};
@@ -59,17 +58,6 @@ function computeStats() {
 }
 
 const stats = computeStats();
-
-function catLine({ key, emoji, label }) {
-  const total = meta.testRows.filter(r => r.category === key).length;
-  if (total === 0) return null;
-  const parts = DEVS.map(dev => {
-    const { passed, failed } = stats[key][dev];
-    const ok = failed === 0 ? '✅' : '❌';
-    return `${DEV_EMOJI[dev]} ${passed}/${total}${ok}`;
-  });
-  return `${emoji} *${label} (${total}):*  ${parts.join('  ')}`;
-}
 
 // ── failures (grouped by testId) ─────────────────────────────────────────────
 
@@ -104,9 +92,18 @@ if (reportLink) {
 }
 msg += '\n';
 
-for (const cat of CATS) {
-  const line = catLine(cat);
-  if (line) msg += line + '\n';
+// Results table
+msg += `| Category | 🖥️ Desktop | 📱 Android | 🍎 iOS |\n`;
+msg += `|---|---|---|---|\n`;
+for (const { key, emoji, label } of CATS) {
+  const total = meta.testRows.filter(r => r.category === key).length;
+  if (total === 0) continue;
+  const cells = DEVS.map(dev => {
+    const { passed, failed } = stats[key][dev];
+    const ok = failed === 0 ? '✅' : '❌';
+    return `${passed}/${total} ${ok}`;
+  });
+  msg += `| ${emoji} ${label} (${total}) | ${cells.join(' | ')} |\n`;
 }
 
 msg += buildFailures();
