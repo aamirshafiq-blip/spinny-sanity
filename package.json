@@ -1,0 +1,16 @@
+{
+  "name": "plp-sanity",
+  "version": "1.0.0",
+  "description": "Spinny PLP automated sanity — UI + API, Android / iOS / Desktop",
+  "scripts": {
+    "test": "playwright test",
+    "test:desktop": "playwright test --project=Desktop",
+    "test:android": "playwright test --project=Android",
+    "test:ios": "playwright test --project=iOS",
+    "report": "playwright show-report"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.61.1",
+    "googleapis": "^176.0.0"
+  }
+}
