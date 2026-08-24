@@ -8,7 +8,7 @@ module.exports = defineConfig({
   testDir: './tests',
   timeout: 90000,
   retries: 1,
-  workers: isCI ? 4 : 10,
+  workers: isCI ? 6 : 10,
 
   reporter: [
     ['json', { outputFile: 'test-results/results.json' }],
