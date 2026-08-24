@@ -57,6 +57,7 @@ jobs:
         run: node scripts/send-slack.js
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          ARTIFACT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Cleanup old Drive reports (keep 7 days)
         run: node scripts/cleanup-drive.js 7

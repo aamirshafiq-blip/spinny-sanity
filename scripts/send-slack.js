@@ -1,7 +1,8 @@
 /**
- * Reads the latest report folder, builds the Slack message, and posts to both channels.
+ * Reads the latest report folder, builds a compact Slack message, and posts to both channels.
  * Usage: node scripts/send-slack.js
  * Requires: SLACK_TOKEN env var (Bot User OAuth Token)
+ * Optional: ARTIFACT_URL env var — used as fallback link when Drive upload failed
  */
 
 const https = require('https');
@@ -13,7 +14,6 @@ if (!SLACK_TOKEN) { console.error('SLACK_TOKEN env var is required'); process.ex
 
 const CHANNELS = [
   { id: 'C097JUWCPEU', prefix: '' },
-  { id: 'C05GVHETJRM', prefix: '<@U02KH6AJCTV> <@U0A7LEA1P0Q>\n' },
 ];
 
 // ── find latest report ───────────────────────────────────────────────────────
@@ -26,48 +26,90 @@ const folders = fs.readdirSync(reportsDir)
 
 if (folders.length === 0) { console.error('No report folders found'); process.exit(1); }
 
-const latestDir   = path.join(reportsDir, folders[0]);
-const meta        = JSON.parse(fs.readFileSync(path.join(latestDir, 'meta.json'), 'utf-8'));
+const latestDir     = path.join(reportsDir, folders[0]);
+const meta          = JSON.parse(fs.readFileSync(path.join(latestDir, 'meta.json'), 'utf-8'));
 const driveLinkFile = path.join(latestDir, 'drive-link.txt');
-const driveLink   = fs.existsSync(driveLinkFile) ? fs.readFileSync(driveLinkFile, 'utf-8').trim() : null;
+const driveLink     = fs.existsSync(driveLinkFile) ? fs.readFileSync(driveLinkFile, 'utf-8').trim() : null;
+const artifactUrl   = process.env.ARTIFACT_URL || null;
+const reportLink    = driveLink || artifactUrl;
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── stats ────────────────────────────────────────────────────────────────────
 
-const cell = (status, ms) => `${status === 'passed' ? '✅' : '❌'} ${ms ? (ms/1000).toFixed(1)+'s' : '-'}`;
+const CATS = [
+  { key: 'ui',     emoji: '📋', label: 'UI' },
+  { key: 'filter', emoji: '🔍', label: 'Filter' },
+  { key: 'city',   emoji: '🏙️', label: 'City' },
+  { key: 'api',    emoji: '🔌', label: 'API' },
+];
+const DEVS = ['Desktop', 'Android', 'iOS'];
+const DEV_EMOJI = { Desktop: '🖥️', Android: '📱', iOS: '🍎' };
 
-function buildTable(rows) {
-  const lines = ['| Test | 🖥️ Desktop | 📱 Android | 🍎 iOS |', '|---|---|---|---|'];
-  for (const r of rows) {
-    const d = r.devices;
-    lines.push(`| ${r.title} | ${cell(d.Desktop.status, d.Desktop.durationMs)} | ${cell(d.Android.status, d.Android.durationMs)} | ${cell(d.iOS.status, d.iOS.durationMs)} |`);
+function computeStats() {
+  const out = {};
+  for (const { key } of CATS) {
+    out[key] = {};
+    const rows = meta.testRows.filter(r => r.category === key);
+    for (const dev of DEVS) {
+      const passed = rows.filter(r => r.devices[dev]?.status === 'passed').length;
+      const failed = rows.filter(r => r.devices[dev]?.status === 'failed').length;
+      out[key][dev] = { passed, failed, total: rows.length };
+    }
   }
-  return lines.join('\n');
+  return out;
+}
+
+const stats = computeStats();
+
+function catLine({ key, emoji, label }) {
+  const total = meta.testRows.filter(r => r.category === key).length;
+  if (total === 0) return null;
+  const parts = DEVS.map(dev => {
+    const { passed, failed } = stats[key][dev];
+    const ok = failed === 0 ? '✅' : '❌';
+    return `${DEV_EMOJI[dev]} ${passed}/${total}${ok}`;
+  });
+  return `${emoji} *${label} (${total}):*  ${parts.join('  ')}`;
+}
+
+// ── failures (grouped by testId) ─────────────────────────────────────────────
+
+function buildFailures() {
+  if (!meta.failures || meta.failures.length === 0) return '';
+
+  const grouped = {};
+  for (const f of meta.failures) {
+    if (!grouped[f.testId]) grouped[f.testId] = { title: f.title, devices: [], error: f.error || '' };
+    if (!grouped[f.testId].devices.includes(f.device)) grouped[f.testId].devices.push(f.device);
+  }
+
+  let out = `\n---\n🚨 *${meta.totalFailed} failure${meta.totalFailed !== 1 ? 's' : ''} — action required*\n\n`;
+  for (const [testId, info] of Object.entries(grouped)) {
+    const devStr   = info.devices.join(', ');
+    const firstLine = info.error.split('\n')[0].trim();
+    const shortErr  = firstLine.slice(0, 200);
+    out += `*${testId}: ${info.title}* _(${devStr})_\n\`${shortErr}\`\n\n`;
+  }
+  return out;
 }
 
 // ── build message ────────────────────────────────────────────────────────────
 
 const overallEmoji = meta.totalFailed === 0 ? '✅' : '❌';
-const uiRows     = meta.testRows.filter(r => r.category === 'ui');
-const filterRows = meta.testRows.filter(r => r.category === 'filter');
-const cityRows   = meta.testRows.filter(r => r.category === 'city');
-const apiRows    = meta.testRows.filter(r => r.category === 'api');
 
 let msg = `${overallEmoji} *PLP Sanity — ${meta.runLabel} IST*\n`;
-msg += `*URL tested:* spinny.com/used-cars/delhi/ | *${meta.totalPassed}/${meta.totalTests} tests passed*\n`;
-if (driveLink) msg += `📎 *Full Report (with screenshots):* <${driveLink}|Download ZIP>\n`;
-msg += `\n---\n\n`;
-
-if (uiRows.length)     msg += `*📋 UI Tests*\n${buildTable(uiRows)}\n\n`;
-if (filterRows.length) msg += `*🔍 Filter Tests*\n${buildTable(filterRows)}\n\n`;
-if (cityRows.length)   msg += `*🏙️ City Tests*\n${buildTable(cityRows)}\n\n`;
-if (apiRows.length)    msg += `*🔌 API Tests (api.spinny.com/listing/v7)*\n${buildTable(apiRows)}`;
-
-if (meta.failures && meta.failures.length > 0) {
-  msg += `\n\n---\n🚨 *Failures — Action Required*\n\n`;
-  for (const f of meta.failures) {
-    msg += `❌ *[${f.device}] ${f.testId}: ${f.title}*\nError: ${f.error.slice(0, 300)}\n\n`;
-  }
+msg += `*${meta.totalPassed}/${meta.totalTests} passed* | spinny.com/used-cars/delhi/\n`;
+if (reportLink) {
+  const label = driveLink ? 'Full Report (screenshots & video)' : 'GitHub Actions Run';
+  msg += `📎 <${reportLink}|${label}>\n`;
 }
+msg += '\n';
+
+for (const cat of CATS) {
+  const line = catLine(cat);
+  if (line) msg += line + '\n';
+}
+
+msg += buildFailures();
 
 // ── post to Slack ────────────────────────────────────────────────────────────
 
