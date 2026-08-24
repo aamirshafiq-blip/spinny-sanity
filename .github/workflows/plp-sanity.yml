@@ -41,6 +41,12 @@ jobs:
           zip -r "${REPORT_DIR}.zip" "$REPORT_DIR/"
           echo "ZIP_PATH=${REPORT_DIR}.zip" >> $GITHUB_ENV
 
+      - name: Generate RCA for failures
+        run: node scripts/generate-rca.js "${{ env.REPORT_DIR }}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        continue-on-error: true
+
       - name: Write Drive credentials
         run: |
           mkdir -p credentials

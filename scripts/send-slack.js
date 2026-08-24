@@ -71,13 +71,25 @@ function buildFailures() {
     if (!grouped[f.testId].devices.includes(f.device)) grouped[f.testId].devices.push(f.device);
   }
 
+  const hasRca = meta.rca && Object.keys(meta.rca).length > 0;
   let out = `\n---\n🚨 *${meta.totalFailed} failure${meta.totalFailed !== 1 ? 's' : ''} — action required*\n\n`;
-  for (const [testId, info] of Object.entries(grouped)) {
-    const devStr   = info.devices.join(', ');
-    const firstLine = info.error.split('\n')[0].trim();
-    const shortErr  = firstLine.slice(0, 200);
-    out += `*${testId}: ${info.title}* _(${devStr})_\n\`${shortErr}\`\n\n`;
+
+  if (hasRca) {
+    out += `| Test | Device(s) | RCA |\n|---|---|---|\n`;
+    for (const [testId, info] of Object.entries(grouped)) {
+      const devStr = info.devices.join(', ');
+      const rca    = (meta.rca[testId] || '-').replace(/\|/g, '\\|');
+      out += `| ${testId}: ${info.title} | ${devStr} | ${rca} |\n`;
+    }
+  } else {
+    out += `| Test | Device(s) | Error |\n|---|---|---|\n`;
+    for (const [testId, info] of Object.entries(grouped)) {
+      const devStr   = info.devices.join(', ');
+      const shortErr = info.error.split('\n')[0].trim().slice(0, 150).replace(/\|/g, '\\|');
+      out += `| ${testId}: ${info.title} | ${devStr} | ${shortErr} |\n`;
+    }
   }
+
   return out;
 }
 
